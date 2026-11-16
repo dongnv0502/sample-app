@@ -1,0 +1,18 @@
+# Deploy manifest for the homelab. CI renders __IMAGE__ and writes the result
+# to dongnv0502/homelab: apps/sample-app/compose.yml (GitOps picks it up).
+name: sample-app
+
+services:
+  sample-app:
+    image: __IMAGE__
+    container_name: sample-app
+    restart: unless-stopped
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.sample-app.rule=Host(`sample.thelastengineer.xyz`)
+      - traefik.http.services.sample-app.loadbalancer.server.port=3000
+
+networks:
+  proxy:
+    external: true

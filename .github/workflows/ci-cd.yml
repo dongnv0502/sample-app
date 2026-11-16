@@ -1,0 +1,62 @@
+# CI: test -> build image -> push to GHCR
+# CD: write the new image tag into the homelab repo; the homelab's GitOps
+#     cron (deploy.sh, every 5 min) then runs `docker compose up -d`.
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+  HOMELAB_REPO: dongnv0502/homelab
+  APP_DIR: apps/sample-app
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test
+        run: node --test
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: APP_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+
+      - name: Deploy (bump image tag in homelab repo)
+        env:
+          TOKEN: ${{ secrets.HOMELAB_REPO_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${HOMELAB_REPO}.git" homelab
+          mkdir -p "homelab/${APP_DIR}"
+          sed "s#__IMAGE__#${IMAGE}:sha-${GITHUB_SHA}#" deploy/compose.yml > "homelab/${APP_DIR}/compose.yml"
+          cd homelab
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${APP_DIR}"
+          git diff --cached --quiet && { echo "nothing to deploy"; exit 0; }
+          git commit -m "deploy(sample-app): ${GITHUB_SHA::7}"
+          git push
