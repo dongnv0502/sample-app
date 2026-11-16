@@ -2,7 +2,7 @@
 const http = require("node:http");
 
 const VERSION = process.env.APP_VERSION || "dev";
-const MESSAGE = "Hello from the homelab!";
+const MESSAGE = "Hello from the homelab! (v2: deployed by CI/CD)";
 
 function handler(req, res) {
   if (req.url === "/health") {
